@@ -47,7 +47,7 @@ class GapSensor:
         """
         Initialise subscribers
         """
-        self._sub_depth_jumps = rospy.Subscriber("depth_jumps", DepthJump, self._receive_depth_jumps, queue_size=1)
+        self._sub_depth_jumps = rospy.Subscriber("depth_jumps", DepthJump, self._receive_depth_jumps, queue_size=15)
 
     def _init_publisher(self):
         """
@@ -219,7 +219,7 @@ class GapSensor:
 
             # move, merge, disappear
             if (depth_jumps_last[i] != 0 and depth_jumps[i] == 0):
-                index_new = self._search_x_degree_positiv(depth_jumps, i, 3)
+                index_new = self._search_x_degree_positiv(depth_jumps, i, 4)
                 if index_new == None:
                     index_new = self._search_x_degree_negativ(depth_jumps, i, 1)
                 self._check_move_merge_disappear(depth_jumps_last, i, index_new)
@@ -227,7 +227,7 @@ class GapSensor:
             # appear or split
             if index_new == None and (depth_jumps_last[i] == 0 and depth_jumps[i] == 1):
                 # split: check if node near (with in 3 degrees)
-                index_new = self._search_x_degree_positiv(depth_jumps, i, 3)
+                index_new = self._search_x_degree_positiv(depth_jumps, i, 4)
                 self._check_split_appear(i, index_new)
 
         # 359 -> 180
@@ -236,7 +236,7 @@ class GapSensor:
 
             # move, merge, disappear
             if (depth_jumps_last[i] != 0 and depth_jumps[i] == 0):
-                index_new = self._search_x_degree_negativ(depth_jumps, i, 3)
+                index_new = self._search_x_degree_negativ(depth_jumps, i, 4)
                 if index_new == None:
                     index_new = self._search_x_degree_positiv(depth_jumps, i, 1)
                 self._check_move_merge_disappear(depth_jumps_last, i, index_new)
@@ -244,7 +244,7 @@ class GapSensor:
             # appear or split
             if index_new == None and (depth_jumps_last[i] == 0 and depth_jumps[i] == 1):
                 # split: check if node near (with in 3 degrees)
-                index_new = self._search_x_degree_negativ(depth_jumps, i, 3)
+                index_new = self._search_x_degree_negativ(depth_jumps, i, 4)
                 self._check_split_appear(i, index_new)
 
     def _match_backwards(self, depth_jumps_last, depth_jumps):
@@ -256,7 +256,7 @@ class GapSensor:
             index_new = None
             # move, merge, disappear
             if (depth_jumps_last[i] != 0 and depth_jumps[i] == 0):
-                index_new = self._search_x_degree_negativ(depth_jumps, i, 3)
+                index_new = self._search_x_degree_negativ(depth_jumps, i, 4)
                 if index_new == None:
                     index_new = self._search_x_degree_positiv(depth_jumps, i, 1)
                 self._check_move_merge_disappear(depth_jumps_last, i, index_new)
@@ -264,7 +264,7 @@ class GapSensor:
             # appear or split
             if index_new == None and (depth_jumps_last[i] == 0 and depth_jumps[i] == 1):
                 # split: check if node near (with in 3 degrees)
-                index_new = self._search_x_degree_negativ(depth_jumps, i, 3)
+                index_new = self._search_x_degree_negativ(depth_jumps, i, 4)
                 self._check_split_appear(i, index_new)
 
         # 180 -> 359
@@ -272,7 +272,7 @@ class GapSensor:
             index_new = None
             # move, merge, disappear
             if (depth_jumps_last[i] != 0 and depth_jumps[i] == 0):
-                index_new = self._search_x_degree_positiv(depth_jumps, i, 3)
+                index_new = self._search_x_degree_positiv(depth_jumps, i, 4)
                 if index_new == None:
                     index_new = self._search_x_degree_negativ(depth_jumps, i, 1)
                 self._check_move_merge_disappear(depth_jumps_last, i, index_new)
@@ -280,7 +280,7 @@ class GapSensor:
             # appear or split
             if index_new == None and (depth_jumps_last[i] == 0 and depth_jumps[i] == 1):
                 # split: check if node near (with in 3 degrees)
-                index_new = self._search_x_degree_positiv(depth_jumps, i, 3)
+                index_new = self._search_x_degree_positiv(depth_jumps, i, 4)
                 self._check_split_appear(i, index_new)
     
     def _search_x_degree_positiv(self, depth_jumps, index, degree_search):
