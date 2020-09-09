@@ -32,7 +32,7 @@ class GapSensor:
         self.critical_events = CriticalEvents()
         self.moved_gaps = MovedGaps()
 
-        self.debug_to_file = True
+        self.debug_to_file = False
         self.file_depth_jumps_receive = "depth_jumps_receive.csv"
         self._remove_debug_files()
 
@@ -143,8 +143,8 @@ class GapSensor:
             self.match_rotation(0, len(depth_jumps_last), 1, depth_jumps_last, depth_jumps)
         elif rotation > 0:    
             self.match_rotation(len(depth_jumps_last) - 1, -1, -1, depth_jumps_last, depth_jumps)
-        elif movement == 0:
-            self._match_drift_while_still_stand(depth_jumps_last, depth_jumps)
+        #elif movement == 0:
+        #    self._match_drift_while_still_stand(depth_jumps_last, depth_jumps)
 
         # forwards backwards  
         if movement != 0:
@@ -289,7 +289,7 @@ class GapSensor:
         """
         index_new = None
 
-        for increment in range(0, degree_search + 1):
+        for increment in range(1, degree_search + 1):
             if depth_jumps[(index + increment)%len(depth_jumps)] == 1:
                 index_new = (index + increment)%len(depth_jumps)
                 break
@@ -302,7 +302,7 @@ class GapSensor:
         """
         index_new = None
 
-        for decrement in range(0, degree_search + 1):
+        for decrement in range(1, degree_search + 1):
             if depth_jumps[index - decrement] == 1:
                 index_new = index - decrement
                 break
