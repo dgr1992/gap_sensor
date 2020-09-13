@@ -108,7 +108,7 @@ catkin_package(
 #  INCLUDE_DIRS include
   LIBRARIES gap_sensor
   CATKIN_DEPENDS rospy std_msgs
-  DEPENDS system_lib
+  DEPENDS
 )
 
 ###########
