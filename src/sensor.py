@@ -94,7 +94,7 @@ class GapSensor:
     def _process(self, depth_jump_data):
         self.lock.acquire()
         try:
-
+            start = time.time()
             # initialise msgs empty
             self.critical_events = CriticalEvents()
             self.critical_events.events = []
@@ -129,6 +129,9 @@ class GapSensor:
 
             self.update_gap_view = True
 
+            end = time.time()
+            process_time = (end - start) * 1000
+            print("Time to process scan: " + str(process_time) + " ms")
         except Exception as ex:
            print(ex.message)
 
@@ -155,24 +158,44 @@ class GapSensor:
         Match the depth jumps from previous step with the current.
         """
         for i in range(start_index, end_index, increment):
-            if depth_jumps_last[i % len(depth_jumps_last)] != 0:
-                if depth_jumps[i % len(depth_jumps)] == 0:                
-                    index = i
-                    index_new = None
+            index = i
+            index_new = None
 
+            # when at t-1 a depth jump was detected at this position, then try to find the new position of it
+            if depth_jumps_last[i % len(depth_jumps_last)] != 0:
+                if depth_jumps[i % len(depth_jumps)] == 0:
+                    # search in direction
                     for j in range(0,4):
                         if depth_jumps[(index + increment * j) % len(depth_jumps)] == 1:
                             index_new = (index + increment * j) % len(depth_jumps)
                             break
                     
                     # corresponding position might be in the opposite direction
-                    if index_new == None and depth_jumps[(index - increment) % len(depth_jumps)] > 0:
-                        index_new = (index - increment) % len(depth_jumps)
+                    if index_new == None: # and depth_jumps[(index - increment) % len(depth_jumps)] > 0:
+                        #index_new = (index - increment) % len(depth_jumps)
+                        for j in range(1,3):
+                            if depth_jumps[(index - increment * j) % len(depth_jumps)] == 1:
+                                index_new = (index - increment * j) % len(depth_jumps)
+                                break
 
                     self._check_move_merge_disappear(depth_jumps_last, i, index_new)
                 else:
                     depth_jumps[i] = 0
-            elif (depth_jumps_last[i % len(depth_jumps_last)] == 0 and depth_jumps[i % len(depth_jumps)] == 1 and depth_jumps_last[i - 1] == 0 and depth_jumps_last[(i + 1) % len(depth_jumps_last)] == 0):
+            """
+            else:
+                # It is a new depth jump when at t-1 no detection and t is a detection
+                last_no_detection = depth_jumps_last[i - 1] == 0 and depth_jumps_last[i % len(depth_jumps_last)] == 0 and depth_jumps_last[(i + 1) % len(depth_jumps_last)] == 0
+
+                # When at the start index the detected depth jump has moved from 259 -> 0 or 0 -> 259
+                if depth_jumps[i % len(depth_jumps)] == 1 and last_no_detection and index != start_index:
+                    # appear
+                    self._discontinuity_appear(i)
+                    depth_jumps[i] = 0
+            """
+        # TODO make this more efficient
+        # depth_jumps now contains all new depth jumps
+        for i in range(start_index, end_index, increment):
+            if depth_jumps[i % len(depth_jumps)] == 1:
                 # appear
                 self._discontinuity_appear(i)
                 depth_jumps[i] = 0
