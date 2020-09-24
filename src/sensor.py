@@ -34,6 +34,7 @@ class GapSensor:
 
         self.debug_to_file = False
         self.file_depth_jumps_receive = "depth_jumps_receive.csv"
+        self.file_depth_jumps = "depth_jumps.csv"
         self._remove_debug_files()
 
         self._init_publisher()
@@ -76,6 +77,9 @@ class GapSensor:
         if os.path.exists(self.file_depth_jumps_receive):
             os.remove(self.file_depth_jumps_receive)
 
+        if os.path.exists(self.file_depth_jumps):
+            os.remove(self.file_depth_jumps)
+
     def run(self):
         angle_change = 0
         last_time = 0
@@ -110,6 +114,7 @@ class GapSensor:
             if self.debug_to_file:
                 with open(self.file_depth_jumps_receive,'ab') as f4:
                     tmp = np.asarray(depth_jumps)
+                    tmp = np.insert(tmp,0,rotation)
                     np.savetxt(f4, tmp.reshape(1, tmp.shape[0]), delimiter=",")
 
             # TODO Filter depth jumps to get the valid gaps. Depth jump is a gap if the robot fits throuh it.
@@ -123,9 +128,14 @@ class GapSensor:
                 self.pub_moved_gaps.publish(self.moved_gaps)
 
             self.rotation_last = rotation
-            self.depth_jumps_last = np.asarray(depth_jump_data.depth_jumps)
             self.scan_last = scan
             self.movement_last = movement
+
+            if self.debug_to_file:
+                with open(self.file_depth_jumps,'ab') as f4:
+                    tmp = np.asarray(self.depth_jumps_last)
+                    tmp = np.insert(tmp,0,rotation)
+                    np.savetxt(f4, tmp.reshape(1, tmp.shape[0]), delimiter=",")
 
             self.update_gap_view = True
 
@@ -157,30 +167,30 @@ class GapSensor:
         """
         Match the depth jumps from previous step with the current.
         """
-        for i in range(start_index, end_index, increment):
-            index = i
+        for index in range(start_index, end_index, increment):
             index_new = None
 
             # when at t-1 a depth jump was detected at this position, then try to find the new position of it
-            if depth_jumps_last[i % len(depth_jumps_last)] != 0:
-                if depth_jumps[i % len(depth_jumps)] == 0:
+            if depth_jumps_last[index % len(depth_jumps_last)] != 0:
+                if depth_jumps[index % len(depth_jumps)] == 0:
                     # search in direction
-                    for j in range(0,4):
-                        if depth_jumps[(index + increment * j) % len(depth_jumps)] == 1:
-                            index_new = (index + increment * j) % len(depth_jumps)
-                            break
+                    #for j in range(0,4):
+                    #    if depth_jumps[(index + increment * j) % len(depth_jumps)] != 0:
+                    #        index_new = (index + increment * j) % len(depth_jumps)
+                    #        break
                     
                     # corresponding position might be in the opposite direction
-                    if index_new == None: # and depth_jumps[(index - increment) % len(depth_jumps)] > 0:
+                    #if index_new == None: # and depth_jumps[(index - increment) % len(depth_jumps)] > 0:
                         #index_new = (index - increment) % len(depth_jumps)
-                        for j in range(1,3):
-                            if depth_jumps[(index - increment * j) % len(depth_jumps)] == 1:
-                                index_new = (index - increment * j) % len(depth_jumps)
-                                break
-
-                    self._check_move_merge_disappear(depth_jumps_last, i, index_new)
+                    #    for j in range(1,3):
+                    #        if depth_jumps[(index - increment * j) % len(depth_jumps)] != 0:
+                    #            index_new = (index - increment * j) % len(depth_jumps)
+                    #            break
+                    index_new = self._find_new_pos_of_depth_jump(depth_jumps, index, increment)
+                    self._check_move_merge_disappear(depth_jumps_last, index, index_new)    
                 else:
-                    depth_jumps[i] = 0
+                    depth_jumps[index] = 0
+                    self.depth_jumps_last[index] = 1
             """
             else:
                 # It is a new depth jump when at t-1 no detection and t is a detection
@@ -194,11 +204,34 @@ class GapSensor:
             """
         # TODO make this more efficient
         # depth_jumps now contains all new depth jumps
-        for i in range(start_index, end_index, increment):
-            if depth_jumps[i % len(depth_jumps)] == 1:
-                # appear
-                self._discontinuity_appear(i)
-                depth_jumps[i] = 0
+        for index in range(start_index, end_index, increment):
+            if depth_jumps[index % len(depth_jumps)] == 1:
+                index_old = self._find_new_pos_of_depth_jump(depth_jumps_last, index, increment)
+                if index_old != None:
+                    #move
+                    self._discontinuity_moved(index_old, index)
+                else:
+                    # appear
+                    self._discontinuity_appear(index)
+                    depth_jumps[index] = 0
+
+    def _find_new_pos_of_depth_jump(self, depth_jumps, index, increment):
+        index_next = None
+        # search in direction
+        for j in range(0,4):
+            if depth_jumps[(index + increment * j) % len(depth_jumps)] != 0:
+                index_next = (index + increment * j) % len(depth_jumps)
+                break
+        
+        # corresponding position might be in the opposite direction
+        if index_next == None: # and depth_jumps[(index - increment) % len(depth_jumps)] > 0:
+            #index_new = (index - increment) % len(depth_jumps)
+            for j in range(1,3):
+                if depth_jumps[(index - increment * j) % len(depth_jumps)] != 0:
+                    index_next = (index - increment * j) % len(depth_jumps)
+                    break
+        
+        return index_next
 
     def _match_drift_while_still_stand(self, depth_jumps_last, depth_jumps):
         """
@@ -362,6 +395,9 @@ class GapSensor:
         """
         Handle split
         """
+        self.depth_jumps_last[index_old] = 3
+        self.depth_jumps_last[index_new] = 3
+
         split = CriticalEvent()
         split.event_type = CriticalEventEnum.SPLIT.value
         split.angle_old = index_old
@@ -375,6 +411,9 @@ class GapSensor:
         """
         Handle appear
         """
+
+        self.depth_jumps_last[index] = 2
+
         appear = CriticalEvent()
         appear.event_type = CriticalEventEnum.APPEAR.value
         appear.angle_old = 0
@@ -387,6 +426,8 @@ class GapSensor:
         """
         Handle disappear
         """
+        self.depth_jumps_last[index] = 0
+        
         disappear = CriticalEvent()
         disappear.event_type = CriticalEventEnum.DISAPPEAR.value
         disappear.angle_old = 0
@@ -399,6 +440,9 @@ class GapSensor:
         """
         Handle move
         """
+        self.depth_jumps_last[index_old] = 0
+        self.depth_jumps_last[index_new] = 1
+
         move = GapMove()
         move.angle_old = index_old
         move.angle_new = index_new
@@ -410,6 +454,9 @@ class GapSensor:
         """
         Handle merge
         """
+        self.depth_jumps_last[index_old] = 0
+        self.depth_jumps_last[index_new] = 4
+
         merge = CriticalEvent()
         merge.event_type = CriticalEventEnum.MERGE.value
         merge.angle_old = index_old
