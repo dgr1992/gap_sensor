@@ -4,6 +4,7 @@ import threading
 import time
 import numpy as np
 import os
+import copy
 
 from depth_jump_sensor.msg import DepthJump
 from gap_sensor.msg import CriticalEvent, CriticalEvents, MovedGaps, GapMove
@@ -153,11 +154,14 @@ class GapSensor:
         """
         Detection of the critical events appear, disappear, split, merge. Further more, notice where a depth jump has moved.
         """
+        #if rotation != 0 and movement != 0 and (1 in depth_jumps):
+        #    print('strange things happening now')
+
         # rotation
         if rotation < 0:
-            self.match_rotation(0, len(depth_jumps_last), 1, self.depth_jumps_last, depth_jumps)
+            self.match_rotation(0, len(self.depth_jumps_last), 1, self.depth_jumps_last, depth_jumps)
         elif rotation > 0:    
-            self.match_rotation(len(depth_jumps_last) - 1, -1, -1, self.depth_jumps_last, depth_jumps)
+            self.match_rotation(len(self.depth_jumps_last) - 1, -1, -1, self.depth_jumps_last, depth_jumps)
         #elif movement == 0:
         #    self._match_drift_while_still_stand(depth_jumps_last, depth_jumps)
 
@@ -169,7 +173,7 @@ class GapSensor:
         """
         Match the depth jumps from previous step with the current.
         """
-        depth_jumps_cp = np.asarray(depth_jumps)
+        depth_jumps_cp = copy.copy(depth_jumps)
         for index in range(start_index, end_index, increment):
             index_new = None
 
