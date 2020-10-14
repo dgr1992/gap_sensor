@@ -21,8 +21,9 @@ class GapSensor:
     """
 
     def __init__(self):
-        rospy.init_node("gap_sensor")
+        rospy.init_node("gap_sensor", log_level=rospy.INFO)
         
+        self.current_sequence_id = 0
         self.depth_jumps_last = None
         self.scan_last = None
         self.rotation_last = None
@@ -111,12 +112,14 @@ class GapSensor:
             scan = np.asarray(depth_jump_data.range_data)
             rotation = depth_jump_data.rotation
             movement = depth_jump_data.liniear_x
+            self.current_sequence_id = depth_jump_data.header.seq
 
             if self.debug_to_file:
                 with open(self.file_depth_jumps_receive,'ab') as f4:
                     tmp = np.asarray(depth_jumps)
                     tmp = np.insert(tmp,0,rotation)
                     tmp = np.insert(tmp,0,movement)
+                    tmp = np.insert(tmp,0,self.current_sequence_id)
                     np.savetxt(f4, tmp.reshape(1, tmp.shape[0]), delimiter=",")
 
             # TODO Filter depth jumps to get the valid gaps. Depth jump is a gap if the robot fits throuh it.
@@ -136,15 +139,17 @@ class GapSensor:
             if self.debug_to_file:
                 with open(self.file_depth_jumps,'ab') as f4:
                     tmp = np.asarray(self.depth_jumps_last)
+                    #TODO timestamp
                     tmp = np.insert(tmp,0,rotation)
                     tmp = np.insert(tmp,0,movement)
+                    tmp = np.insert(tmp,0,self.current_sequence_id)
                     np.savetxt(f4, tmp.reshape(1, tmp.shape[0]), delimiter=",")
 
             self.update_gap_view = True
 
             end = time.time()
             process_time = (end - start) * 1000
-            print("Time to process scan: " + str(process_time) + " ms")
+            #print("Time to process scan: " + str(process_time) + " ms")
         except Exception as ex:
            print(ex.message)
 
@@ -162,12 +167,13 @@ class GapSensor:
             self.match_rotation(0, len(self.depth_jumps_last), 1, self.depth_jumps_last, depth_jumps)
         elif rotation > 0:    
             self.match_rotation(len(self.depth_jumps_last) - 1, -1, -1, self.depth_jumps_last, depth_jumps)
-        #elif movement == 0:
-        #    self._match_drift_while_still_stand(depth_jumps_last, depth_jumps)
 
         # forwards backwards  
         if movement != 0:
             self._match_forward_backwards(self.depth_jumps_last, depth_jumps, movement)
+
+        if movement == 0 and rotation == 0:
+            self._match_drift_while_still_stand(self.depth_jumps_last, depth_jumps)
 
     def match_rotation(self, start_index, end_index, increment, depth_jumps_last, depth_jumps):
         """
@@ -181,7 +187,7 @@ class GapSensor:
             if depth_jumps_last[index % len(depth_jumps_last)] != 0:
                 if depth_jumps_cp[index % len(depth_jumps_cp)] == 0:
                     index_new = self._find_new_pos_of_depth_jump(depth_jumps_cp, index, increment)
-                    self._check_move_merge_disappear(depth_jumps_last, index, index_new)    
+                    self._check_move_merge_disappear(depth_jumps_last, index, index_new, increment)    
                 else:
                     depth_jumps_cp[index] = 0
                     self.depth_jumps_last[index] = 1
@@ -243,24 +249,31 @@ class GapSensor:
         depth_jumps_last (int[]): Array indicating the depth jumps at t - 1
         depth_jumps (int[]): Array indicating the depth jumps at t
         """
+        depth_jumps_cp = copy.copy(depth_jumps)
         for i in range(0, 360):
-            if (depth_jumps_last[i] != 0 and depth_jumps[i] == 0):
+            if (depth_jumps_last[i] != 0 and depth_jumps_cp[i] == 0):
                 # check existing                
                 index_new = None
 
-                if depth_jumps[i - 1] == 1:
+                if depth_jumps_cp[i - 1] == 1:
                     index_new = i - 1
-                elif depth_jumps[(i + 1) % len(depth_jumps)] == 1:
-                    index_new = (i + 1) % len(depth_jumps)
+                    #rospy.logdebug("drift while still stand (check) - seq: " + str(self.current_sequence_id) + " - i: " + str(i) + " - index_new: " + str(index_new))
+                elif depth_jumps_cp[(i + 1) % len(depth_jumps_cp)] == 1:
+                    index_new = (i + 1) % len(depth_jumps_cp)
+                    #rospy.logdebug("drift while still stand (check) - seq: " + str(self.current_sequence_id) + " - i: " + str(i) + " - index_new: " + str(index_new))
 
-                self._check_move_merge_disappear(depth_jumps_last, i, index_new)
+                rospy.logdebug("drift while still stand  - seq: " + str(self.current_sequence_id) + " - i: " + str(i) + " - index_new: " + str(index_new))
+                self._check_move_merge_disappear(depth_jumps_last, i, index_new, +1)
                 
-                if index_new != None:                    
-                    depth_jumps[index_new] = 0
-            elif (depth_jumps_last[i % len(depth_jumps_last)] == 0 and depth_jumps[i % len(depth_jumps)] == 1 and depth_jumps_last[i - 1] == 0 and depth_jumps_last[(i + 1) % len(depth_jumps_last)] == 0):
+                #if index_new != None:                    
+                #    depth_jumps_cp[index_new] = 0
+            elif (depth_jumps_last[i % len(depth_jumps_last)] == 0 and depth_jumps_cp[i % len(depth_jumps_cp)] == 1 and depth_jumps_last[i - 1] == 0 and depth_jumps_last[(i + 1) % len(depth_jumps_last)] == 0):
                 # appear
                 self._discontinuity_appear(i)
-                depth_jumps[i] = 0
+                depth_jumps_cp[i] = 0
+            elif (depth_jumps_last[i] > 1 and depth_jumps_cp[i] == 1):
+                # set back to 1 after appear
+                self.depth_jumps_last[i] = 1
 
     def _match_forward_backwards(self, depth_jumps_last, depth_jumps, movement):
         """
@@ -284,45 +297,64 @@ class GapSensor:
         depth_jumps_last (int[]): Array indicating the depth jumps at t - 1
         depth_jumps (int[]): Array indicating the depth jumps at t
         """
+        depth_jumps_cp = copy.copy(depth_jumps)
         # 0 -> 179
-        for i in range(0, len(depth_jumps) / 2):
+        for i in range(0, len(depth_jumps_cp) / 2):
             index_new = None
 
             # move, merge, disappear
-            if (depth_jumps_last[i] != 0 and depth_jumps[i] == 0):
-                index_new = self._search_x_degree_positiv(depth_jumps, i, 4)
+            if (depth_jumps_last[i] != 0 and depth_jumps_cp[i] == 0):
+                index_new = self._search_x_degree_positiv(depth_jumps_cp, i, 4)
+                rospy.logdebug("match forward - 0 -> 179 - search positive - index_new: " + str(index_new))
                 if index_new == None:
-                    index_new = self._search_x_degree_negativ(depth_jumps, i, 1)
-                self._check_move_merge_disappear(depth_jumps_last, i, index_new)
+                    index_new = self._search_x_degree_negativ(depth_jumps_cp, i, 2)
+                    rospy.logdebug("match forward - 0 -> 179 - search negative - index_new: " + str(index_new))
+                #self._check_move_merge_disappear(depth_jumps_last, i, index_new)
+                self._check_move_merge_disappear(depth_jumps_last, i, index_new, 1) 
 
             if index_new == None:
-                if depth_jumps_last[i] == 0 and depth_jumps[i] == 1:
+                if depth_jumps_last[i] == 0 and depth_jumps_cp[i] == 1:
                     # appear or split: try find node near (with in 3 degrees)
-                    index_new = self._search_x_degree_positiv(depth_jumps, i, 4)
-                    self._check_split_appear(i, index_new)
-                elif depth_jumps_last[i] != 1 and depth_jumps[i] == 1:
+                    # index_new = self._search_x_degree_positiv(depth_jumps, i, 4)
+                    self._check_split_appear(depth_jumps_last, depth_jumps_cp, i, +1)
+                elif depth_jumps_last[i] != 1 and depth_jumps_cp[i] == 1:
                     # gap stayed at the same index, set to 1
                     depth_jumps_last[i] = 1
+                    # depth jump got processed at this point
+                    depth_jumps_cp[i] = 0
+            else:
+                # depth jump got processed at this point
+                depth_jumps_cp[i] = 0
 
         # 359 -> 180
-        for i in range(len(depth_jumps) - 1, len(depth_jumps) / 2, -1):
+        for i in range(len(depth_jumps_cp) - 1, len(depth_jumps_cp) / 2, -1):
             index_new = None
-
             # move, merge, disappear
-            if (depth_jumps_last[i] != 0 and depth_jumps[i] == 0):
-                index_new = self._search_x_degree_negativ(depth_jumps, i, 4)
+            if (depth_jumps_last[i] != 0 and depth_jumps_cp[i] == 0):
+                index_new = self._search_x_degree_negativ(depth_jumps_cp, i, 4)
+                rospy.logdebug("match forward - 359 -> 180 - search negative - index_new: " + str(index_new))
                 if index_new == None:
-                    index_new = self._search_x_degree_positiv(depth_jumps, i, 1)
-                self._check_move_merge_disappear(depth_jumps_last, i, index_new)
+                    index_new = self._search_x_degree_positiv(depth_jumps_cp, i, 2)
+                    rospy.logdebug("match forward - 359 -> 180 - search positive - index_new: " + str(index_new))
+                #self._check_move_merge_disappear(depth_jumps_last, i, index_new)
+                self._check_move_merge_disappear(depth_jumps_last, i, index_new, -1) 
 
             if index_new == None:
-                if depth_jumps_last[i] == 0 and depth_jumps[i] == 1:
+                if depth_jumps_last[i] == 0 and depth_jumps_cp[i] == 1:
                     # appear or split: try find node near (with in 3 degrees)
-                    index_new = self._search_x_degree_negativ(depth_jumps, i, 4)
-                    self._check_split_appear(i, index_new)
-                elif depth_jumps_last[i] != 1 and depth_jumps[i] == 1:
+                    #index_new = self._search_x_degree_negativ(depth_jumps_cp, i, 4)
+                    #self._check_split_appear(i, index_new)
+                    # depth jump got processed at this point
+                    #depth_jumps_cp[i] = 0
+                    self._check_split_appear(depth_jumps_last, depth_jumps_cp, i, -1)
+                elif depth_jumps_last[i] != 1 and depth_jumps_cp[i] == 1:
                     # gap stayed at the same index, set to 1
                     depth_jumps_last[i] = 1
+                    # depth jump got processed at this point
+                    depth_jumps_cp[i] = 0
+            else:
+                # depth jump got processed at this point
+                depth_jumps_cp[i] = 0
 
     def _match_backwards(self, depth_jumps_last, depth_jumps):
         """
@@ -330,45 +362,68 @@ class GapSensor:
         
         Parameters:
         depth_jumps_last (int[]): Array indicating the depth jumps at t - 1
-        depth_jumps (int[]): Array indicating the depth jumps at t
+        depth_jumps_cp (int[]): Array indicating the depth jumps at t
         """
+        depth_jumps_cp = copy.copy(depth_jumps)
         # 180 -> 0
-        for i in range(len(depth_jumps) / 2, -1, -1):
+        for i in range(len(depth_jumps_cp) / 2, -1, -1):
             index_new = None
             # move, merge, disappear
-            if (depth_jumps_last[i] != 0 and depth_jumps[i] == 0):
-                index_new = self._search_x_degree_negativ(depth_jumps, i, 4)
+            if (depth_jumps_last[i] != 0 and depth_jumps_cp[i] == 0):
+                index_new = self._search_x_degree_negativ(depth_jumps_cp, i, 4)
+                rospy.logdebug("match backwards - 180 -> 0 - search negative - index_new: " + str(index_new))
                 if index_new == None:
-                    index_new = self._search_x_degree_positiv(depth_jumps, i, 1)
-                self._check_move_merge_disappear(depth_jumps_last, i, index_new)
+                    index_new = self._search_x_degree_positiv(depth_jumps_cp, i, 2)
+                    rospy.logdebug("match backwards - 180 -> 0 - search positive - index_new: " + str(index_new))
+                #self._check_move_merge_disappear(depth_jumps_last, i, index_new)
+                self._check_move_merge_disappear(depth_jumps_last, i, index_new, -1) 
 
             if index_new == None:
-                if depth_jumps_last[i] == 0 and depth_jumps[i] == 1:
+                if depth_jumps_last[i] == 0 and depth_jumps_cp[i] == 1:
                     # appear or split: try find node near (with in 3 degrees)
-                    index_new = self._search_x_degree_negativ(depth_jumps, i, 4)
-                    self._check_split_appear(i, index_new)
-                elif depth_jumps_last[i] != 1 and depth_jumps[i] == 1:
+                    #index_new = self._search_x_degree_negativ(depth_jumps_cp, i, 4)
+                    #self._check_split_appear(i, index_new)
+                    # depth jump got processed at this point
+                    #depth_jumps_cp[i] = 0
+                    self._check_split_appear(depth_jumps_last, depth_jumps_cp, i, -1)
+                elif depth_jumps_last[i] != 1 and depth_jumps_cp[i] == 1:
                     # gap stayed at the same index, set to 1
                     depth_jumps_last[i] = 1
+                    # depth jump got processed at this point
+                    depth_jumps_cp[i] = 0
+            else:
+                # depth jump got processed at this point
+                depth_jumps_cp[i] = 0
 
         # 180 -> 359
-        for i in range(len(depth_jumps) / 2, len(depth_jumps)):
+        for i in range(len(depth_jumps_cp) / 2, len(depth_jumps_cp)):
             index_new = None
             # move, merge, disappear
-            if (depth_jumps_last[i] != 0 and depth_jumps[i] == 0):
-                index_new = self._search_x_degree_positiv(depth_jumps, i, 4)
+            if (depth_jumps_last[i] != 0 and depth_jumps_cp[i] == 0):
+                index_new = self._search_x_degree_positiv(depth_jumps_cp, i, 4)
+                rospy.logdebug("match backwards - 180 -> 359 - search positive - index_new: " + str(index_new))
                 if index_new == None:
-                    index_new = self._search_x_degree_negativ(depth_jumps, i, 1)
-                self._check_move_merge_disappear(depth_jumps_last, i, index_new)
+                    index_new = self._search_x_degree_negativ(depth_jumps_cp, i, 2)
+                    rospy.logdebug("match backwards - 180 -> 359 - search negative - index_new: " + str(index_new))
+                #self._check_move_merge_disappear(depth_jumps_last, i, index_new)
+                self._check_move_merge_disappear(depth_jumps_last, i, index_new, 1) 
             
             if index_new == None:
-                if depth_jumps_last[i] == 0 and depth_jumps[i] == 1:
+                if depth_jumps_last[i] == 0 and depth_jumps_cp[i] == 1:
                     # appear or split: try find node near (with in 3 degrees)
-                    index_new = self._search_x_degree_positiv(depth_jumps, i, 4)
-                    self._check_split_appear(i, index_new)
-                elif depth_jumps_last[i] != 1 and depth_jumps[i] == 1:
+                    #index_new = self._search_x_degree_positiv(depth_jumps_cp, i, 4)
+                    #self._check_split_appear(i, index_new)
+                    # depth jump got processed at this point
+                    #depth_jumps_cp[i] = 0
+                    self._check_split_appear(depth_jumps_last, depth_jumps_cp, i, +1)
+                elif depth_jumps_last[i] != 1 and depth_jumps_cp[i] == 1:
                     # gap stayed at the same index, set to 1
                     depth_jumps_last[i] = 1
+                    # depth jump got processed at this point
+                    depth_jumps_cp[i] = 0
+            else:
+                # depth jump got processed at this point
+                depth_jumps_cp[i] = 0
     
     def _search_x_degree_positiv(self, depth_jumps, index, degree_search):
         """
@@ -406,51 +461,144 @@ class GapSensor:
 
         return index_new
 
-    def _check_split_appear(self, index_old, index_new):
+    def _check_split_appear(self, depth_jumps_last, depth_jumps, index_new_1, search_increment):
         """
         Check if it is a split or appear.
 
         Parameters:
-        index_old (int): index of difference between t-1 and t
-        index_new (int): index of detection second gap caused by split
+        index_old (int): index that splitted
+        index_new_1 (int): index of detection at t
         """
-        if index_new != None:
+        index_old = None
+        index_new_2 = None
+
+        # try to find index that splitted
+        if search_increment > 0:
+            index_old = self._search_x_degree_positiv(depth_jumps_last, index_new_1, 2)
+        else:
+            index_old = self._search_x_degree_negativ(depth_jumps_last, index_new_1, 2)
+
+
+        if index_old != None:
+            index_new_2 = self._find_second_depth_jump_from_split(depth_jumps_last, depth_jumps, index_new_1, index_old)
+        
+        if index_old != None and index_new_2 != None:
             # split
-            self._discontinuity_split(index_old, index_new)
+            self._discontinuity_split(index_old, index_new_1, index_new_2)
+            # depth jump got processed at this point
+            depth_jumps[index_new_1] = 0
+            depth_jumps[index_new_2] = 0
         else:
             # appear
-            self._discontinuity_appear(index_old)
+            self._discontinuity_appear(index_new_1)
 
-    def _check_move_merge_disappear(self, depth_jumps_last, index_old, index_new):
+    def _check_move_merge_disappear(self, depth_jumps_last, index_old_1, index_new, search_increment):
         """
         Check if it is a move, merge or disappear.
         """
         if index_new != None:
-            if depth_jumps_last[index_new] == 0:
+            
+            index_old_2 = self._check_merge(depth_jumps_last, index_new, index_old_1, search_increment)
+
+            if index_old_2 == None:
                 # move
-                self._discontinuity_moved(index_old, index_new)
+                self._discontinuity_moved(index_old_1, index_new)
+                rospy.logdebug("move - seq: " + str(self.current_sequence_id) + " - index_old: " + str(index_old_1) + " index_new: " + str(index_new))
             else:
+                #rospy.logdebug("merge - seq: " + str(self.current_sequence_id) + " - index_old: " + str(index_old) + " index_new: " + str(index_new) + "; depth_jumps_last[index_new]=" + str(depth_jumps_last[index_new]))
                 # merge
-                self._discontinuity_merge(index_old, index_new)
+                self._discontinuity_merge(index_old_1, index_old_2, index_new)
+                #rospy.logdebug("merge - seq: " + str(self.current_sequence_id) + " - index_old: " + str(index_old) + " index_new: " + str(index_new) + "; depth_jumps_last[index_new]=" + str(depth_jumps_last[index_new]))
+                rospy.logdebug("merge - seq: " + str(self.current_sequence_id) + " - index_old_1: " + str(index_old_1) + " - index_old_2: " + str(index_old_2) + " index_new: " + str(index_new))
         else:
             # disappear
-            self._discontinuity_disappear(index_old)
+            self._discontinuity_disappear(index_old_1)
 
-    def _discontinuity_split(self, index_1, index_2):
+    def _find_second_depth_jump_from_split(self, depth_jumps_last, depth_jumps, index_new_1, index_old):
+        """
+        Check if the new index is from a split.
+
+        Parameters:
+        depth_jumps_last (int()): depth jumps at t - 1
+        depth_jumps (int[]): depth jumps at t
+        index_new_1 (int): index where a depth jump appeard from a split
+        index_old (int): index of depth jump that splitted
+
+        Returns:
+        index_new_2 (int): index of the second gap from the split
+        """
+        index_new_2 = None
+
+        # Find a second depth jump that appeared behinde the depth jump at index_old
+        split_detect = False
+        split_detect = split_detect or (depth_jumps[(index_new_1 + 2) % len(depth_jumps)] == 1)
+        split_detect = split_detect or (depth_jumps[(index_new_1 - 2) % len(depth_jumps)] == 1)
+
+        # check for no depth jump with in 2 degrees left right at t - 1
+        if split_detect:
+            no_depth_jump_in_range = True
+            for j in range(1,4):
+                no_depth_jump_in_range = no_depth_jump_in_range and (depth_jumps_last[(index_old + j) % len(depth_jumps_last)] == 0)
+                no_depth_jump_in_range = no_depth_jump_in_range and (depth_jumps_last[(index_old - j) % len(depth_jumps_last)] == 0)
+
+            if no_depth_jump_in_range:
+                # find the second index of the split
+                if depth_jumps[(index_new_1 + 2) % len(depth_jumps)] == 1:
+                    index_new_2 = (index_new_1 + 2) % len(depth_jumps)
+                elif depth_jumps[(index_new_1 - 2) % len(depth_jumps)] == 1:
+                    index_new_2 = (index_new_1 - 2) % len(depth_jumps)
+
+        return index_new_2
+
+    def _check_merge(self, depth_jumps_last, index_new, index_old_1, search_increment):
+        """
+        Check if new index is from a merge of two depth jumps.
+
+        Parameters:
+        depth_jumps_last (int[]): depth jumps at t - 1
+        index_new_1 (int): index of depth jump that appeard from merge
+        index_old_1 (int): first old depth jump that might have caused a merge
+        search_increment (int): the search increment used to find index_old_1
+
+        Return:
+        index_old_2 (int): second depth jump that merged
+        """
+
+        index_old_2 = None
+
+        # search for second depth jump in oposite direction
+        for j in range(0, 4):
+            if index_old_2 == None and depth_jumps_last[(index_old_1 - search_increment * j) % len(depth_jumps_last)] > 0:
+                index_old_2 = (index_old_1 - search_increment * j) % len(depth_jumps_last)
+
+        # if a depth jump was found check if the distance between the two depth jumps is 2
+        if index_old_2 != None:
+            diff = abs(index_old_1 - index_old_2)
+            if diff > 10:
+                diff = 360 - diff
+            if diff != 2:
+                index_old_2 = None
+
+        return index_old_2
+        
+    def _discontinuity_split(self, index_old_1, index_new_1, index_new_2):
         """
         Handle split
 
         Parameters:
-        index_1 (int): gap at t-1 that splitted, first gap from split
+        index_new_1 (int): gap at t-1 that splitted, first gap from split
         index_2 (int): second gap from split
         """
-        self.depth_jumps_last[index_1] = 3
-        self.depth_jumps_last[index_2] = 3
+        rospy.logdebug("split - seq: " + str(self.current_sequence_id) + " - index_new_1: " + str(index_new_1) + " index_new_2: " + str(index_new_2))
+
+        self.depth_jumps_last[index_new_1] = 3
+        self.depth_jumps_last[index_new_2] = 3
 
         split = CriticalEvent()
         split.event_type = CriticalEventEnum.SPLIT.value
-        split.angle_old = index_1
-        split.angle_new = index_2
+        split.angle_old_1 = index_old_1
+        split.angle_new_1 = index_new_1
+        split.angle_new_2 = index_new_2
 
         self.critical_events.events.append(split)
 
@@ -463,13 +611,13 @@ class GapSensor:
         Parameters:
         index (int): index where the gap appeared
         """
+        rospy.logdebug("appear - seq: " + str(self.current_sequence_id) + " - index: " + str(index))
 
         self.depth_jumps_last[index] = 2
 
         appear = CriticalEvent()
         appear.event_type = CriticalEventEnum.APPEAR.value
-        appear.angle_old = 0
-        appear.angle_new = index
+        appear.angle_new_1 = index
 
         self.critical_events.events.append(appear)
         self._publish_critical_event(appear)
@@ -481,12 +629,12 @@ class GapSensor:
         Parameters:
         index (int): index where the gap disappeared
         """
+        rospy.logdebug("disappear - seq: " + str(self.current_sequence_id) + " index:" + str(index))
         self.depth_jumps_last[index] = 0
         
         disappear = CriticalEvent()
         disappear.event_type = CriticalEventEnum.DISAPPEAR.value
-        disappear.angle_old = 0
-        disappear.angle_new = index
+        disappear.angle_old_1 = index
 
         self.critical_events.events.append(disappear)
         self._publish_critical_event(disappear)
@@ -509,21 +657,24 @@ class GapSensor:
         self.moved_gaps.gap_moves.append(move)
         self._publish_gap_move(move)
 
-    def _discontinuity_merge(self, index_old, index_new):
+    def _discontinuity_merge(self, index_old_1, index_old_2, index_new):
         """
         Handle merge
 
         Parameters:
-        index_old (int): index of gap 1 at t-1
-        index_new (int): index of gap 2 at t-1 which is also the index of the gap resulted from merge
+        index_old_1 (int): index of gap 1 at t-1
+        index_old_2 (int): index of gap 2 at t-1
+        index_new (int): index of gap resulted from merge
         """
-        self.depth_jumps_last[index_old] = 0
+        self.depth_jumps_last[index_old_1] = 0
+        self.depth_jumps_last[index_old_2] = 0
         self.depth_jumps_last[index_new] = 4
 
         merge = CriticalEvent()
         merge.event_type = CriticalEventEnum.MERGE.value
-        merge.angle_old = index_old
-        merge.angle_new = index_new
+        merge.angle_old_1 = index_old_1
+        merge.angle_old_2 = index_old_2
+        merge.angle_new_1 = index_new
 
         self.critical_events.events.append(merge)
         self._publish_critical_event(merge)
