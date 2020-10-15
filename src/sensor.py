@@ -321,7 +321,11 @@ class GapSensor:
                 if depth_jumps_last[i] == 0 and depth_jumps_cp[i] == 1:
                     # appear or split: try find node near (with in 3 degrees)
                     # index_new = self._search_x_degree_positiv(depth_jumps, i, 4)
-                    self._check_split_appear(depth_jumps_last, depth_jumps_cp, i, +1)
+                    index_new_1, index_new_2 = self._check_split_appear(depth_jumps_last, depth_jumps_cp, i, +1)
+                    if index_new_2 != None:
+                        i = index_new_2
+                    else:
+                        i = index_new_1
                 elif depth_jumps_last[i] != 1 and depth_jumps_cp[i] == 1:
                     # gap stayed at the same index, set to 1
                     depth_jumps_last[i] = 1
@@ -351,7 +355,11 @@ class GapSensor:
                     #self._check_split_appear(i, index_new)
                     # depth jump got processed at this point
                     #depth_jumps_cp[i] = 0
-                    self._check_split_appear(depth_jumps_last, depth_jumps_cp, i, -1)
+                    index_new_1, index_new_2 = self._check_split_appear(depth_jumps_last, depth_jumps_cp, i, -1)
+                    if index_new_2 != None:
+                        i = index_new_2
+                    else:
+                        i = index_new_1
                 elif depth_jumps_last[i] != 1 and depth_jumps_cp[i] == 1:
                     # gap stayed at the same index, set to 1
                     depth_jumps_last[i] = 1
@@ -390,7 +398,11 @@ class GapSensor:
                     #self._check_split_appear(i, index_new)
                     # depth jump got processed at this point
                     #depth_jumps_cp[i] = 0
-                    self._check_split_appear(depth_jumps_last, depth_jumps_cp, i, -1)
+                    index_new_1, index_new_2 = self._check_split_appear(depth_jumps_last, depth_jumps_cp, i, -1)
+                    if index_new_2 != None:
+                        i = index_new_2
+                    else:
+                        i = index_new_1
                 elif depth_jumps_last[i] != 1 and depth_jumps_cp[i] == 1:
                     # gap stayed at the same index, set to 1
                     depth_jumps_last[i] = 1
@@ -420,7 +432,11 @@ class GapSensor:
                     #self._check_split_appear(i, index_new)
                     # depth jump got processed at this point
                     #depth_jumps_cp[i] = 0
-                    self._check_split_appear(depth_jumps_last, depth_jumps_cp, i, +1)
+                    index_new_1, index_new_2 = self._check_split_appear(depth_jumps_last, depth_jumps_cp, i, +1)
+                    if index_new_2 != None:
+                        i = index_new_2
+                    else:
+                        i = index_new_1
                 elif depth_jumps_last[i] != 1 and depth_jumps_cp[i] == 1:
                     # gap stayed at the same index, set to 1
                     depth_jumps_last[i] = 1
@@ -473,6 +489,10 @@ class GapSensor:
         Parameters:
         index_old (int): index that splitted
         index_new_1 (int): index of detection at t
+
+        Returns:
+        index_new_1 (int):
+        index_new_1 (int);
         """
         index_old = None
         index_new_2 = None
@@ -496,6 +516,8 @@ class GapSensor:
         else:
             # appear
             self._discontinuity_appear(index_new_1)
+
+        return index_new_1, index_new_2
 
     def _check_move_merge_disappear(self, depth_jumps_last, index_old_1, index_new, search_increment):
         """
@@ -572,9 +594,9 @@ class GapSensor:
         index_old_2 = None
 
         # search for second depth jump in oposite direction
-        for j in range(0, 4):
-            if index_old_2 == None and depth_jumps_last[(index_old_1 - search_increment * j) % len(depth_jumps_last)] > 0:
-                index_old_2 = (index_old_1 - search_increment * j) % len(depth_jumps_last)
+        for j in range(1, 4):
+            if index_old_2 == None and depth_jumps_last[(index_old_1 + search_increment * j) % len(depth_jumps_last)] > 0:
+                index_old_2 = (index_old_1 + search_increment * j) % len(depth_jumps_last)
 
         # if a depth jump was found check if the distance between the two depth jumps is 2
         if index_old_2 != None:
