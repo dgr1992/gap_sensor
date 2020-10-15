@@ -304,7 +304,9 @@ class GapSensor:
         """
         depth_jumps_cp = copy.copy(depth_jumps)
         # 0 -> 179
-        for i in range(0, len(depth_jumps_cp) / 2):
+        # for i in range(0, len(depth_jumps_cp) / 2):
+        i = 0
+        while i < (len(depth_jumps_cp) / 2):
             index_new = None
 
             # move, merge, disappear
@@ -334,9 +336,13 @@ class GapSensor:
             else:
                 # depth jump got processed at this point
                 depth_jumps_cp[i] = 0
+            
+            i += 1
 
         # 359 -> 180
-        for i in range(len(depth_jumps_cp) - 1, len(depth_jumps_cp) / 2, -1):
+        #for i in range(len(depth_jumps_cp) - 1, len(depth_jumps_cp) / 2, -1):
+        i = len(depth_jumps_cp) - 1
+        while i >= (len(depth_jumps_cp) / 2):
             index_new = None
             # move, merge, disappear
             if (depth_jumps_last[i] != 0 and depth_jumps_cp[i] == 0):
@@ -368,6 +374,8 @@ class GapSensor:
             else:
                 # depth jump got processed at this point
                 depth_jumps_cp[i] = 0
+            
+            i -= 1
 
     def _match_backwards(self, depth_jumps_last, depth_jumps):
         """
@@ -379,7 +387,9 @@ class GapSensor:
         """
         depth_jumps_cp = copy.copy(depth_jumps)
         # 180 -> 0
-        for i in range(len(depth_jumps_cp) / 2, -1, -1):
+        # for i in range(len(depth_jumps_cp) / 2, -1, -1):
+        i = len(depth_jumps_cp) / 2
+        while i >= 0:
             index_new = None
             # move, merge, disappear
             if (depth_jumps_last[i] != 0 and depth_jumps_cp[i] == 0):
@@ -412,8 +422,12 @@ class GapSensor:
                 # depth jump got processed at this point
                 depth_jumps_cp[i] = 0
 
+            i -= 1
+
         # 180 -> 359
-        for i in range(len(depth_jumps_cp) / 2, len(depth_jumps_cp)):
+        #for i in range(len(depth_jumps_cp) / 2, len(depth_jumps_cp)):
+        i = len(depth_jumps_cp) / 2
+        while i < len(depth_jumps_cp)
             index_new = None
             # move, merge, disappear
             if (depth_jumps_last[i] != 0 and depth_jumps_cp[i] == 0):
@@ -445,7 +459,9 @@ class GapSensor:
             else:
                 # depth jump got processed at this point
                 depth_jumps_cp[i] = 0
-    
+
+            i += 1
+            
     def _search_x_degree_positiv(self, depth_jumps, index, degree_search):
         """
         Find new position of depth jump searching in positiv direction (counter clock wise).
@@ -486,13 +502,13 @@ class GapSensor:
         """
         Check if it is a split or appear.
 
-        Parameters:
-        index_old (int): index that splitted
-        index_new_1 (int): index of detection at t
+        Parameters: \n
+        index_old (int): index that splitted\n
+        index_new_1 (int): index of detection at t\n
 
-        Returns:
-        index_new_1 (int):
-        index_new_1 (int);
+        Returns:\n
+        index_new_1 (int):\n
+        index_new_1 (int):\n
         """
         index_old = None
         index_new_2 = None
@@ -510,12 +526,15 @@ class GapSensor:
         if index_old != None and index_new_2 != None:
             # split
             self._discontinuity_split(index_old, index_new_1, index_new_2)
+
+            depth_jumps_last[index_old] = 0
             # depth jump got processed at this point
             depth_jumps[index_new_1] = 0
             depth_jumps[index_new_2] = 0
         else:
             # appear
             self._discontinuity_appear(index_new_1)
+            depth_jumps[index_new_1] = 0
 
         return index_new_1, index_new_2
 
@@ -612,12 +631,13 @@ class GapSensor:
         """
         Handle split
 
-        Parameters:
-        index_new_1 (int): gap at t-1 that splitted, first gap from split
-        index_2 (int): second gap from split
+        Parameters:\n
+        index_new_1 (int): gap at t-1 that splitted, first gap from split\n
+        index_2 (int): second gap from split\n
         """
         rospy.logdebug("split - seq: " + str(self.current_sequence_id) + " - index_new_1: " + str(index_new_1) + " index_new_2: " + str(index_new_2))
 
+        self.depth_jumps_last[index_old_1] = 0
         self.depth_jumps_last[index_new_1] = 3
         self.depth_jumps_last[index_new_2] = 3
 
