@@ -43,6 +43,9 @@ class GapSensor:
         self._init_subscribers()
 
         self.update_gap_view = False
+        
+        self.depth_jumps_received_history = []
+        self.depth_jumps_history = []
 
         self.lock = threading.Lock()
 
@@ -97,6 +100,9 @@ class GapSensor:
 
         gap_visualisation_gnt.close()
 
+        self._save_depth_jumps_history()
+        self._save_depth_jumps_received_history()
+
     def _process(self, depth_jump_data):
         self.lock.acquire()
         try:
@@ -120,7 +126,7 @@ class GapSensor:
                     tmp = np.insert(tmp,0,rotation)
                     tmp = np.insert(tmp,0,movement)
                     tmp = np.insert(tmp,0,self.current_sequence_id)
-                    np.savetxt(f4, tmp.reshape(1, tmp.shape[0]), delimiter=",")
+                    self.depth_jumps_received_history.append(tmp)
 
             # TODO Filter depth jumps to get the valid gaps. Depth jump is a gap if the robot fits throuh it.
 
@@ -139,11 +145,10 @@ class GapSensor:
             if self.debug_to_file:
                 with open(self.file_depth_jumps,'ab') as f4:
                     tmp = np.asarray(self.depth_jumps_last)
-                    #TODO timestamp
                     tmp = np.insert(tmp,0,rotation)
                     tmp = np.insert(tmp,0,movement)
                     tmp = np.insert(tmp,0,self.current_sequence_id)
-                    np.savetxt(f4, tmp.reshape(1, tmp.shape[0]), delimiter=",")
+                    self.depth_jumps_history.append(tmp)
 
             self.update_gap_view = True
 
@@ -696,6 +701,24 @@ class GapSensor:
         gap_move (GapMover):
         """
         self.pub_gap_move.publish(gap_move)
+
+    def _save_depth_jumps_received_history(self):
+        """
+        Save depth jumps received history.
+        """
+        if self.debug_to_file:
+            with open(self.file_depth_jumps_receive,'ab') as f4:
+               for tmp in self.depth_jumps_received_history:
+                    np.savetxt(f4, tmp.reshape(1, tmp.shape[0]), delimiter=",")
+
+    def _save_depth_jumps_history(self):
+        """
+        Save depth jumps history.
+        """
+        if self.debug_to_file:
+            with open(self.file_depth_jumps,'ab') as f4:
+                for tmp in self.depth_jumps_history:
+                    np.savetxt(f4, tmp.reshape(1, tmp.shape[0]), delimiter=",")
 
 if __name__ == "__main__":
     try:
