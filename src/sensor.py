@@ -130,7 +130,7 @@ class GapSensor:
 
             # TODO Filter depth jumps to get the valid gaps. Depth jump is a gap if the robot fits throuh it.
 
-            self._detect_critical_events(self.rotation_last, self.movement_last, depth_jumps, rotation, movement)
+            self._detect_critical_events(depth_jumps, rotation, movement)
 
             if len(self.critical_events.events) > 0:
                 self.pub_critical_events.publish(self.critical_events)
@@ -160,27 +160,25 @@ class GapSensor:
 
         self.lock.release()
 
-    def _detect_critical_events(self, rotation_last, movement_last, depth_jumps, rotation, movement):
+    def _detect_critical_events(self, depth_jumps, rotation, movement):
         """
         Detection of the critical events appear, disappear, split, merge. Further more, notice where a depth jump has moved.
         """
-        #if rotation != 0 and movement != 0 and (1 in depth_jumps):
-        #    print('strange things happening now')
-
-        # rotation
-        if rotation < 0:
-            self.match_rotation(0, len(self.depth_jumps_last), 1, self.depth_jumps_last, depth_jumps)
-        elif rotation > 0:    
-            self.match_rotation(len(self.depth_jumps_last) - 1, -1, -1, self.depth_jumps_last, depth_jumps)
 
         # forwards backwards  
         if movement != 0:
             self._match_forward_backwards(self.depth_jumps_last, depth_jumps, movement)
 
+        # rotation
+        if rotation < 0:
+            self._match_rotation(0, len(self.depth_jumps_last), 1, self.depth_jumps_last, depth_jumps)
+        elif rotation > 0:    
+            self._match_rotation(len(self.depth_jumps_last) - 1, -1, -1, self.depth_jumps_last, depth_jumps)
+
         if movement == 0 and rotation == 0:
             self._match_drift_while_still_stand(self.depth_jumps_last, depth_jumps)
 
-    def match_rotation(self, start_index, end_index, increment, depth_jumps_last, depth_jumps):
+    def _match_rotation(self, start_index, end_index, increment, depth_jumps_last, depth_jumps):
         """
         Match the depth jumps from previous step with the current.
         """
@@ -196,18 +194,7 @@ class GapSensor:
                 else:
                     depth_jumps_cp[index] = 0
                     self.depth_jumps_last[index] = 1
-            """
-            else:
-                # It is a new depth jump when at t-1 no detection and t is a detection
-                last_no_detection = depth_jumps_last[i - 1] == 0 and depth_jumps_last[i % len(depth_jumps_last)] == 0 and depth_jumps_last[(i + 1) % len(depth_jumps_last)] == 0
 
-                # When at the start index the detected depth jump has moved from 259 -> 0 or 0 -> 259
-                if depth_jumps[i % len(depth_jumps)] == 1 and last_no_detection and index != start_index:
-                    # appear
-                    self._discontinuity_appear(i)
-                    depth_jumps[i] = 0
-            """
-        # TODO make this more efficient
         # depth_jumps now contains all new depth jumps
         for index in range(start_index, end_index, increment):
             if depth_jumps_cp[index % len(depth_jumps_cp)] == 1:
@@ -322,7 +309,6 @@ class GapSensor:
             if index_new == None:
                 if depth_jumps_last[i] == 0 and depth_jumps_cp[i] == 1:
                     # appear or split: try find node near (with in 3 degrees)
-                    # index_new = self._search_x_degree_positiv(depth_jumps, i, 4)
                     index_new_1, index_new_2 = self._check_split_appear(depth_jumps_last, depth_jumps_cp, i, +1)
                     if index_new_2 != None:
                         i = index_new_2
@@ -357,10 +343,6 @@ class GapSensor:
             if index_new == None:
                 if depth_jumps_last[i] == 0 and depth_jumps_cp[i] == 1:
                     # appear or split: try find node near (with in 3 degrees)
-                    #index_new = self._search_x_degree_negativ(depth_jumps_cp, i, 4)
-                    #self._check_split_appear(i, index_new)
-                    # depth jump got processed at this point
-                    #depth_jumps_cp[i] = 0
                     index_new_1, index_new_2 = self._check_split_appear(depth_jumps_last, depth_jumps_cp, i, -1)
                     if index_new_2 != None:
                         i = index_new_2
@@ -404,10 +386,6 @@ class GapSensor:
             if index_new == None:
                 if depth_jumps_last[i] == 0 and depth_jumps_cp[i] == 1:
                     # appear or split: try find node near (with in 3 degrees)
-                    #index_new = self._search_x_degree_negativ(depth_jumps_cp, i, 4)
-                    #self._check_split_appear(i, index_new)
-                    # depth jump got processed at this point
-                    #depth_jumps_cp[i] = 0
                     index_new_1, index_new_2 = self._check_split_appear(depth_jumps_last, depth_jumps_cp, i, -1)
                     if index_new_2 != None:
                         i = index_new_2
@@ -427,7 +405,7 @@ class GapSensor:
         # 180 -> 359
         #for i in range(len(depth_jumps_cp) / 2, len(depth_jumps_cp)):
         i = len(depth_jumps_cp) / 2
-        while i < len(depth_jumps_cp)
+        while i < len(depth_jumps_cp):
             index_new = None
             # move, merge, disappear
             if (depth_jumps_last[i] != 0 and depth_jumps_cp[i] == 0):
@@ -442,10 +420,6 @@ class GapSensor:
             if index_new == None:
                 if depth_jumps_last[i] == 0 and depth_jumps_cp[i] == 1:
                     # appear or split: try find node near (with in 3 degrees)
-                    #index_new = self._search_x_degree_positiv(depth_jumps_cp, i, 4)
-                    #self._check_split_appear(i, index_new)
-                    # depth jump got processed at this point
-                    #depth_jumps_cp[i] = 0
                     index_new_1, index_new_2 = self._check_split_appear(depth_jumps_last, depth_jumps_cp, i, +1)
                     if index_new_2 != None:
                         i = index_new_2
@@ -461,7 +435,9 @@ class GapSensor:
                 depth_jumps_cp[i] = 0
 
             i += 1
-            
+
+    
+
     def _search_x_degree_positiv(self, depth_jumps, index, degree_search):
         """
         Find new position of depth jump searching in positiv direction (counter clock wise).
