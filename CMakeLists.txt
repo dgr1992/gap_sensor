@@ -53,6 +53,7 @@ find_package(catkin REQUIRED COMPONENTS
   CriticalEvents.msg
   GapMove.msg
   MovedGaps.msg
+  CollectionCriticalAndMoved.msg
 )
 
 ## Generate services in the 'srv' folder
