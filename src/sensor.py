@@ -200,7 +200,6 @@ class GapSensor:
         elif rotation > 0:    
             self._match_rotation(len(depth_jumps_last) - 1, -1, -1, depth_jumps_last, depth_jumps)
 
-
     def _match_rotation(self, start_index, end_index, increment, depth_jumps_last, depth_jumps):
         """
         Match the depth jumps from previous step with the current.
@@ -211,7 +210,8 @@ class GapSensor:
             index_new = None
 
             # when at t-1 a depth jump was detected at this position, then try to find the new position of it
-            if depth_jumps_last[index % len(depth_jumps_last)] == 1:
+            # check for >= 1 because appear sets to 2, split to 3 and merge to 4
+            if depth_jumps_last[index % len(depth_jumps_last)] >= 1:
                 if depth_jumps_cp[index % len(depth_jumps_cp)] == 0:
                     index_new = self._find_new_pos_of_depth_jump(depth_jumps_cp, index, increment)
                     self._check_move_merge_disappear(depth_jumps_last, index, index_new, increment)    
@@ -234,7 +234,6 @@ class GapSensor:
                 # positions matched at this point, set copy to 0 so it can not get match with an other disconinutiy
                 depth_jumps_cp[index] = 0
                 
-
     def _find_new_pos_of_depth_jump(self, depth_jumps, index, increment):
         """
         Search for the next depth jump starting at the given index and in the given direction.
@@ -247,15 +246,14 @@ class GapSensor:
         index_next = None
         # search in direction
         for j in range(0,5):
-            if depth_jumps[(index + increment * j) % len(depth_jumps)] != 0:
+            if depth_jumps[(index + increment * j) % len(depth_jumps)] >= 1:
                 index_next = (index + increment * j) % len(depth_jumps)
                 break
         
         # corresponding position might be in the opposite direction
-        if index_next == None: # and depth_jumps[(index - increment) % len(depth_jumps)] > 0:
-            #index_new = (index - increment) % len(depth_jumps)
+        if index_next == None:
             for j in range(1,4):
-                if depth_jumps[(index - increment * j) % len(depth_jumps)] != 0:
+                if depth_jumps[(index - increment * j) % len(depth_jumps)] >= 1:
                     index_next = (index - increment * j) % len(depth_jumps)
                     break
         
@@ -270,8 +268,9 @@ class GapSensor:
         depth_jumps (int[]): Array indicating the depth jumps at t
         """
         depth_jumps_cp = copy.copy(depth_jumps)
-        for index in range(0, 360):
-            if (depth_jumps_last[index] == 1 and depth_jumps_cp[index] == 0):
+        for index in range(0, len(depth_jumps_last)):
+            # check for >= 1 because appear sets to 2, split to 3 and merge to 4
+            if (depth_jumps_last[index] >= 1 and depth_jumps_cp[index] == 0):
                 # check existing                
                 index_new = None
 
@@ -287,9 +286,6 @@ class GapSensor:
                 # appear
                 self._discontinuity_appear(index)
                 depth_jumps_cp[index] = 0
-            elif (depth_jumps_last[index] > 1 and depth_jumps_cp[index] == 1):
-                # set back to 1 after appear
-                self.depth_jumps_last[index] = 1
 
     def _match_forward_backwards(self, depth_jumps_last, depth_jumps, movement):
         """
@@ -352,7 +348,8 @@ class GapSensor:
         """
         index_new = None
         # move, merge, disappear
-        if (depth_jumps_last[index] == 1 and depth_jumps_cp[index] == 0):
+        # check for >= 1 because appear sets to 2, split to 3 and merge to 4
+        if (depth_jumps_last[index] >= 1 and depth_jumps_cp[index] == 0):
             index_new = self._search_x_degree_positiv(depth_jumps_cp, index, 5)
             if index_new == None:
                 index_new = self._search_x_degree_negativ(depth_jumps_cp, index, 3)
@@ -381,7 +378,8 @@ class GapSensor:
         """
         index_new = None
         # move, merge, disappear
-        if (depth_jumps_last[index] == 1 and depth_jumps_cp[index] == 0):
+        # check for >= 1 because appear sets to 2, split to 3 and merge to 4
+        if (depth_jumps_last[index] >= 1 and depth_jumps_cp[index] == 0):
             index_new = self._search_x_degree_negativ(depth_jumps_cp, index, 5)
             if index_new == None:
                 index_new = self._search_x_degree_positiv(depth_jumps_cp, index, 3)
@@ -486,18 +484,14 @@ class GapSensor:
         Check if it is a move, merge or disappear.
         """
         if index_new != None:
-            
-            index_old_2 = self._check_merge(depth_jumps_last, index_new, index_old_1, search_increment)
-
+            index_old_2 = self._check_merge(depth_jumps_last, index_old_1, search_increment)
             if index_old_2 == None:
                 # move
                 self._discontinuity_moved(index_old_1, index_new)
                 rospy.logdebug("move - seq: " + str(self.current_sequence_id) + " - index_old: " + str(index_old_1) + " index_new: " + str(index_new))
             else:
-                #rospy.logdebug("merge - seq: " + str(self.current_sequence_id) + " - index_old: " + str(index_old) + " index_new: " + str(index_new) + "; depth_jumps_last[index_new]=" + str(depth_jumps_last[index_new]))
                 # merge
                 self._discontinuity_merge(index_old_1, index_old_2, index_new)
-                #rospy.logdebug("merge - seq: " + str(self.current_sequence_id) + " - index_old: " + str(index_old) + " index_new: " + str(index_new) + "; depth_jumps_last[index_new]=" + str(depth_jumps_last[index_new]))
                 rospy.logdebug("merge - seq: " + str(self.current_sequence_id) + " - index_old_1: " + str(index_old_1) + " - index_old_2: " + str(index_old_2) + " index_new: " + str(index_new))
         else:
             # disappear
@@ -539,13 +533,12 @@ class GapSensor:
 
         return index_new_2
 
-    def _check_merge(self, depth_jumps_last, index_new, index_old_1, search_increment):
+    def _check_merge(self, depth_jumps_last, index_old_1, search_increment):
         """
         Check if new index is from a merge of two depth jumps.
 
         Parameters:
         depth_jumps_last (int[]): depth jumps at t - 1
-        index_new_1 (int): index of depth jump that appeard from merge
         index_old_1 (int): first old depth jump that might have caused a merge
         search_increment (int): the search increment used to find index_old_1
 
