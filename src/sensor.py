@@ -34,7 +34,7 @@ class GapSensor:
         self.critical_events = CriticalEvents()
         self.moved_gaps = MovedGaps()
 
-        self.debug_to_file = True
+        self.debug_to_file = False
         self.file_depth_jumps_receive = "depth_jumps_receive.csv"
         self.file_depth_jumps = "depth_jumps.csv"
         self._remove_debug_files()
@@ -46,6 +46,9 @@ class GapSensor:
         
         self.depth_jumps_received_history = []
         self.depth_jumps_history = []
+
+        self.process_count = 0
+        self.sum_processing_time = 0
 
         self.lock = threading.Lock()
 
@@ -101,6 +104,9 @@ class GapSensor:
                 gap_visualisation_gnt.draw_gaps(self.depth_jumps_last)
 
         gap_visualisation_gnt.close()
+
+        avg_processing = (self.sum_processing_time) / self.process_count
+        print("Time avg process time: " + str(avg_processing) + " ms")
 
         self._save_depth_jumps_history()
         self._save_depth_jumps_received_history()
@@ -159,6 +165,8 @@ class GapSensor:
 
             end = time.time()
             process_time = (end - start) * 1000
+            self.process_count += 1
+            self.sum_processing_time += process_time
             #print("Time to process scan: " + str(process_time) + " ms")
         except Exception as ex:
            print(ex.message)
