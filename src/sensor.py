@@ -13,12 +13,6 @@ from critical_event_enum import CriticalEventEnum
 from gap_visualiser import GapVisualiser
 
 class GapSensor:
-    """
-    - Determins which of the given depth jumps from the topic depth jumps is a valid gap.
-      A valid gap needs to be wide enough for the robot to fit through. Node keeps track of all
-      but marks non valid ones so .
-    - Recignises appear, disappear, split, merge and publish
-    """
 
     def __init__(self):
         rospy.init_node("gap_sensor", log_level=rospy.INFO)
@@ -167,7 +161,6 @@ class GapSensor:
             process_time = (end - start) * 1000
             self.process_count += 1
             self.sum_processing_time += process_time
-            #print("Time to process scan: " + str(process_time) + " ms")
         except Exception as ex:
            print(ex.message)
 
@@ -211,6 +204,13 @@ class GapSensor:
     def _match_rotation(self, start_index, end_index, increment, depth_jumps_last, depth_jumps):
         """
         Match the depth jumps from previous step with the current.
+
+        Parameters: 
+        start_index (int): Starting point for search
+        end_index (int): End of searching
+        increment (int): direction to check angles
+        depth_jumps_last (int[]): Array indicating the depth jumps at t - 1
+        depth_jumps (int[]): Array indicating the depth jumps at t 
         """
         
         depth_jumps_cp = copy.copy(depth_jumps)
@@ -336,7 +336,7 @@ class GapSensor:
         
         Parameters:
         depth_jumps_last (int[]): Array indicating the depth jumps at t - 1
-        depth_jumps_cp (int[]): Array indicating the depth jumps at t
+        depth_jumps (int[]): Array indicating the depth jumps at t
         """
         depth_jumps_cp = copy.copy(depth_jumps)
         # 179 -> 0
@@ -353,6 +353,15 @@ class GapSensor:
 
     def _check_positive_direction(self, depth_jumps_last, depth_jumps_cp, index):
         """
+        Checks from index in positive direction for neares depth discontinuity at time t-1. 
+
+        Parameters: 
+        depth_jumps_last (int[]): Array indicating the depth jumps at t - 1 
+        depth_jumps_cp (int[]): Array indicating the depth jumps at t 
+        index (int): depth discontinuitiy position at time t 
+
+        Returns: 
+        index (int): postition of neares depth discontinuity 
         """
         index_new = None
         # move, merge, disappear
@@ -383,6 +392,15 @@ class GapSensor:
             
     def _check_negative_direction(self, depth_jumps_last, depth_jumps_cp, index):
         """
+        Checks from index in positive direction for neares depth discontinuity at time t-1. 
+
+        Parameters: 
+        depth_jumps_last (int[]): Array indicating the depth jumps at t - 1 
+        depth_jumps_cp (int[]): Array indicating the depth jumps at t 
+        index (int): depth discontinuitiy position at time t 
+
+        Returns: 
+        index (int): postition of neares depth discontinuity 
         """
         index_new = None
         # move, merge, disappear
@@ -413,12 +431,15 @@ class GapSensor:
 
     def _search_x_degree_positiv(self, depth_jumps, index, degree_search):
         """
-        Find new position of depth jump searching in positiv direction (counter clock wise).
+        Find new position of depth jump searching in positiv direction (counter clock wise). 
         
-        Parameters:
-        depth_jumps_last (int[]): Array indicating the depth jumps at t - 1
-        index (int): start index
-        degree_search (int): number of neigbour elements to check
+        Parameters: 
+        depth_jumps_last (int[]): Array indicating the depth jumps at t - 1 
+        index (int): start index 
+        degree_search (int): number of neigbour elements to check 
+
+        Returns: 
+        index_new (int): position of depth discontinuity 
         """
         index_new = None
 
@@ -431,12 +452,15 @@ class GapSensor:
 
     def _search_x_degree_negativ(self, depth_jumps, index, degree_search):
         """
-        Find new position of depth jump searching in negative direction (clock wise).
+        Find new position of depth jump searching in negative direction (clock wise). 
 
-        Parameters:
-        depth_jumps_last (int[]): Array indicating the depth jumps at t - 1
-        index (int): start index
-        degree_search (int): number of neigbour elements to check
+        Parameters: 
+        depth_jumps_last (int[]): Array indicating the depth jumps at t - 1 
+        index (int): start index 
+        degree_search (int): number of neigbour elements to check 
+
+        Returns: 
+        index_new (int): position of depth discontinuity 
         """
         index_new = None
 
@@ -449,15 +473,15 @@ class GapSensor:
 
     def _check_split_appear(self, depth_jumps_last, depth_jumps, index_new_1, search_increment):
         """
-        Check if it is a split or appear.
+        Check if it is a split or appear. 
 
-        Parameters: \n
-        index_old (int): index that splitted\n
-        index_new_1 (int): index of detection at t\n
+        Parameters: 
+        index_old (int): index that splitted 
+        index_new_1 (int): index of detection at t 
 
-        Returns:\n
-        index_new_1 (int):\n
-        index_new_1 (int):\n
+        Returns: 
+        index_new_1 (int): 
+        index_new_1 (int): 
         """
         index_old = None
         index_new_2 = None
@@ -652,10 +676,10 @@ class GapSensor:
         """
         Handle merge
 
-        Parameters:
-        index_old_1 (int): index of gap 1 at t-1
-        index_old_2 (int): index of gap 2 at t-1
-        index_new (int): index of gap resulted from merge
+        Parameters: 
+        index_old_1 (int): index of gap 1 at t-1 
+        index_old_2 (int): index of gap 2 at t-1 
+        index_new (int): index of gap resulted from merge 
         """
         self.depth_jumps_last[index_old_1] = 0
         self.depth_jumps_last[index_old_2] = 0
@@ -672,10 +696,10 @@ class GapSensor:
 
     def _publish_critical_event(self, event):
         """
-        Publish critical event
+        Publish critical event 
 
-        Parameters:
-        event (CriticalEvent):
+        Parameters: 
+        event (CriticalEvent): Event to publish on the topic critical_event
         """
         self.pub_critical_event.publish(event)
 
@@ -684,11 +708,18 @@ class GapSensor:
         Publish gap move
 
         Parameters:
-        gap_move (GapMover):
+        gap_move (GapMove): gap move to publish on topic gap_move
         """
         self.pub_gap_move.publish(gap_move)
 
     def _publish_collected(self, gaps_moved, critical_events):
+        """
+        Publish all gap moves and critical event as one message.
+
+        Parameters:
+        gap_move (MovedGaps): 
+        event (CriticalEvents):
+        """
         collection_critical_and_moved = CollectionCriticalAndMoved()
         collection_critical_and_moved.events = critical_events
         collection_critical_and_moved.gap_moves = gaps_moved
